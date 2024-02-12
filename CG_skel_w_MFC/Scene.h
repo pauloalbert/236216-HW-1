@@ -8,12 +8,13 @@ using namespace std;
 
 class Model {
 protected:
-	virtual ~Model() {}
 	void virtual draw(Renderer* renderer) = 0;
 	virtual void setShowNormals(bool change);
 	virtual void setShowBox(bool change) = 0;
 	virtual void translate(GLfloat x_trans, GLfloat y_trans, GLfloat z_trans) = 0;
 	virtual void rotate(GLfloat theta_angle, int mode) = 0;
+public: 
+	virtual ~Model() {}
 };
 
 
@@ -72,6 +73,8 @@ public:
 	void translateObjects(GLfloat x_trans, GLfloat y_trans, GLfloat z_trans);
 	void rescaleModels(GLfloat scale);
 	void rotateModels(GLfloat theta_angle, int mode);
+	void removeObjects();
+	void removeObjects(Model* model);
 	int activeModel;
 	int activeLight;
 	int activeCamera;

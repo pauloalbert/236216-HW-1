@@ -71,6 +71,9 @@ MeshModel::~MeshModel(void)
 {
 	delete[] vertex_positions;
 	delete[] normals;
+	delete[] bounding_box;
+	delete _world_transform;
+	delete _normal_transform;
 }
 
 void MeshModel::loadFile(string fileName)
@@ -133,7 +136,6 @@ void MeshModel::loadFile(string fileName)
 	}
 	normalToFace();
 	calculateBoundingBox();
-	std::cout << "here is okay in loadFile after normalToFace" << std::endl;
 }
 
 void MeshModel::draw(Renderer* renderer)
@@ -179,6 +181,19 @@ void MeshModel::scale(GLfloat x_scale, GLfloat y_scale, GLfloat z_scale)
 		vertex_positions[i].y *= y_scale;
 		vertex_positions[i].z *= z_scale;
 		i++;
+	}
+	normalToFace();
+	calculateBoundingBox();
+}
+
+void RotateBoundingBox(vec3 bounding_box[8], const mat4& rotation_matrix)
+{
+	for (int i = 0; i < 8; i++) {
+		vec3 current_vertex = bounding_box[i];
+		vec4 curr_rotated_point = rotation_matrix * vec4(current_vertex, 1.0f);
+
+		// Update the vertex with the rotated coordinates
+		bounding_box[i] = vec3(curr_rotated_point.x, curr_rotated_point.y, curr_rotated_point.z);
 	}
 }
 
@@ -252,9 +267,8 @@ void MeshModel::rotate(GLfloat theta_degree, int mode)
 		vertex_positions[i] = vec3(curr_rotated_point.x, curr_rotated_point.y, curr_rotated_point.z);
 		i++;
 	}
+	RotateBoundingBox(bounding_box, rotation_matrix);
 	normalToFace();
-	calculateBoundingBox();
-
 }
 
 vec3 calculateNormal(vec3 first_point, vec3 second_point, vec3 third_point)
@@ -317,13 +331,14 @@ void MeshModel::calculateBoundingBox()
 		}
 		i++;
 	}
-	bounding_box[0] = vec3(max_x, max_y, max_z);
+	GLfloat epsilon = 0.01f;
+	bounding_box[0] = vec3(max_x+epsilon, max_y+epsilon, max_z);
 	bounding_box[1] = vec3(max_x, max_y, min_z);
-	bounding_box[2] = vec3(max_x, min_y, max_z);
+	bounding_box[2] = vec3(max_x+epsilon, min_y-epsilon, max_z);
 	bounding_box[3] = vec3(max_x, min_y, min_z);
-	bounding_box[4] = vec3(min_x, max_y, max_z);
+	bounding_box[4] = vec3(min_x-epsilon, max_y+epsilon, max_z);
 	bounding_box[5] = vec3(min_x, max_y, min_z);
-	bounding_box[6] = vec3(min_x, min_y, max_z);
+	bounding_box[6] = vec3(min_x-epsilon, min_y-epsilon, max_z);
 	bounding_box[7] = vec3(min_x, min_y, min_z);
 }
 

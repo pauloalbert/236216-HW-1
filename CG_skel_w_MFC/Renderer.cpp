@@ -90,11 +90,11 @@ void Renderer::ClearBuffer()
 void Renderer::DrawLine(vec2 vert1, vec2 vert2, int specialColor, bool clear)
 {
 	//Temp solution. drawing a line out of bounds crashes the code!
-	if (vert1.x < 1 || vert2.x < 1 || vert1.x >= m_width - 1 || vert2.x >= m_width - 1 ||
+	/*if (vert1.x < 1 || vert2.x < 1 || vert1.x >= m_width - 1 || vert2.x >= m_width - 1 ||
 		vert1.y < 1 || vert2.y < 1 || vert2.y >= m_height - 1 || vert1.y >= m_height - 1)
 	{
 		return;
-	}
+	}*/
 
 	//flip the axis so that slope is -1 <= m <= 1
 	bool flipped = false;
@@ -135,6 +135,10 @@ void Renderer::DrawLine(vec2 vert1, vec2 vert2, int specialColor, bool clear)
 
 		//light the pixel
 		if (flipped) {
+			if (x < 0 || x >= m_width-1 || y < 0 || y >= m_height-1)
+			{
+				continue;
+			}
 			if (specialColor == 1) {
 				m_outBuffer[INDEX(m_width, y, x, 0)] = 0;	m_outBuffer[INDEX(m_width, y, x, 1)] = 1;	m_outBuffer[INDEX(m_width, y, x, 2)] = 1;
 			}
@@ -160,6 +164,10 @@ void Renderer::DrawLine(vec2 vert1, vec2 vert2, int specialColor, bool clear)
 			//inverted y and x (because we swapped them in the beginning)
 		}
 		else {
+			if (x < 0 || x >= m_width || y < 0 || y >= m_height)
+			{
+				continue;
+			}
 			if (specialColor == 1) {
 				m_outBuffer[INDEX(m_width, x, y, 0)] = 0;	m_outBuffer[INDEX(m_width, x, y, 1)] = 1;	m_outBuffer[INDEX(m_width, x, y, 2)] = 1;
 			}
@@ -254,35 +262,45 @@ void Renderer::DrawTriangles(const vector<vec3>* vertices, const vector<vec3>* n
 
 void Renderer::DrawBoundingBox(const vec3* bounding_box, bool draw_box) 
 {
-	if (!bounding_box) {
+	if (!bounding_box || !draw_box) {
 		return;
 	}
-	
+
+	// Small offset to break alignment
+	const float epsilon = 0.01f;
+
 	vec4 new_bounding_box[8];
 	vec2 bounding_box_in_vectwo[8];
-	for (int i = 0; i < 8; i++) {
-		// Convert 3D point to homogeneous coordinates
-		vec4 homogeneous_point = vec4(bounding_box[i], 1.0f);
 
+	for (int i = 0; i < 8; i++) {
+		vec4 homogeneous_point = vec4(bounding_box[i], 1.0f);
 		// Apply transformations
 		new_bounding_box[i] = toEuclidian(mat_project * (mat_transform_inverse * homogeneous_point));
 		bounding_box_in_vectwo[i] = vec2(RANGE(new_bounding_box[i].x, -1, 1, 0, m_width), RANGE(new_bounding_box[i].y, -1, 1, 0, m_height));
-		//bounding_box_in_vectwo[i] = vec2(new_bounding_box[i].x, new_bounding_box[i].y);
-
 	}
 
-	DrawLine(bounding_box_in_vectwo[1], bounding_box_in_vectwo[5], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[1], bounding_box_in_vectwo[0], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[1], bounding_box_in_vectwo[3], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[2], bounding_box_in_vectwo[0], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[2], bounding_box_in_vectwo[6], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[2], bounding_box_in_vectwo[3], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[3], bounding_box_in_vectwo[7], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[4], bounding_box_in_vectwo[5], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[4], bounding_box_in_vectwo[6], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[4], bounding_box_in_vectwo[0], 2, !draw_box);
+	// Define the indices to connect vertices in a sequential manner
+	const int indices[12][2] = {
+		{0, 1}, {1, 3}, {3, 2}, {2, 0},
+		{4, 5}, {5, 7}, {7, 6}, {6, 4},
+		{0, 4}, {1, 5}, {2, 6}, {3, 7}
+	};
+
+	// Draw lines to connect the vertices of the bounding box using the defined indices
+	for (int i = 0; i < 12; ++i) {
+		DrawLine(bounding_box_in_vectwo[indices[i][0]], bounding_box_in_vectwo[indices[i][1]], 2, !draw_box);
+	}
+	/*DrawLine(bounding_box_in_vectwo[4], bounding_box_in_vectwo[5], 2, !draw_box);
 	DrawLine(bounding_box_in_vectwo[5], bounding_box_in_vectwo[7], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[6], bounding_box_in_vectwo[7], 2, !draw_box);
+	DrawLine(bounding_box_in_vectwo[7], bounding_box_in_vectwo[6], 2, !draw_box);
+	DrawLine(bounding_box_in_vectwo[6], bounding_box_in_vectwo[4], 2, !draw_box);
+
+	DrawLine(bounding_box_in_vectwo[0], bounding_box_in_vectwo[4], 2, !draw_box);
+	DrawLine(bounding_box_in_vectwo[1], bounding_box_in_vectwo[5], 2, !draw_box);
+	DrawLine(bounding_box_in_vectwo[2], bounding_box_in_vectwo[6], 2, !draw_box);
+	DrawLine(bounding_box_in_vectwo[3], bounding_box_in_vectwo[7], 2, !draw_box);
+	*/
+	
 }
 
 void Renderer::DrawPoint(const vec3& vertex)

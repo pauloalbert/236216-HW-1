@@ -55,7 +55,6 @@ void Scene::setShowNormalsForMeshModels(bool change) {
 			// It's a MeshModel, call setShowNormals
 			meshModel->setShowNormals(change);
 		}
-		// You can handle other types of models here if needed
 	}
 }
 
@@ -67,7 +66,6 @@ void Scene::setShowBoxForMeshModels(bool change) {
 			// It's a MeshModel, call setShowBox
 			meshModel->setShowBox(change);
 		}
-		// You can handle other types of models here if needed
 	}
 }
 
@@ -80,7 +78,6 @@ void Scene::translateObjects(GLfloat x_trans, GLfloat y_trans, GLfloat z_trans)
 			// It's a MeshModel, call setShowBox
 			meshModel->translate(x_trans, y_trans, z_trans);
 		}
-		// You can handle other types of models here if needed
 	}
 }
 
@@ -93,7 +90,6 @@ void Scene::rescaleModels(GLfloat scale)
 			// It's a MeshModel, call scale
 			meshModel->scale(scale, scale, scale);
 		}
-		// You can handle other types of models here if needed
 	}
 }
 void Scene::rotateModels(GLfloat theta_angle, int mode)
@@ -105,8 +101,17 @@ void Scene::rotateModels(GLfloat theta_angle, int mode)
 			// It's a MeshModel, call rotate
 			meshModel->rotate(theta_angle, mode);
 		}
-		// You can handle other types of models here if needed
 	}
+}
+
+void Scene::removeObjects()
+{
+	for (Model* model : models) {
+		if (model != nullptr) {
+			delete model;
+		}
+	}
+	models.clear();
 }
 
 void Scene::draw()

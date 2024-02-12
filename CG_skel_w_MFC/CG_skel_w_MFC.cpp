@@ -36,6 +36,9 @@
 #define DRAW_BOUNDING_BOX 3
 #define HIDE_BOUNDING_BOX 4
 
+#define ADD_TO_SCENE 1
+#define REPLACE_SCENE 2
+
 Scene* scene;
 Renderer* renderer;
 Camera* camera;
@@ -43,6 +46,7 @@ float m_time;
 
 int last_x, last_y;
 bool lb_down, rb_down, mb_down;
+int selectedDrawingOption = ADD_TO_SCENE; // Default option
 
 //----------------------------------------------------------------------------
 // Callbacks
@@ -152,8 +156,20 @@ void fileMenu(int id)
 		if (dlg.DoModal() == IDOK)
 		{
 			std::string s((LPCTSTR)dlg.GetPathName());
-			scene->loadOBJModel((LPCTSTR)dlg.GetPathName());
-			glutPostRedisplay();
+			if (selectedDrawingOption == ADD_TO_SCENE)
+			{
+				// Add the new object to the current scene
+				scene->loadOBJModel((LPCTSTR)dlg.GetPathName());
+				glutPostRedisplay();
+			}
+			else if (selectedDrawingOption == REPLACE_SCENE)
+			{
+				// Replace the current scene with the new object
+				scene->removeObjects();
+				scene->loadOBJModel((LPCTSTR)dlg.GetPathName());
+				glutPostRedisplay();
+			}
+			
 		}
 		break;
 	}
@@ -197,6 +213,11 @@ void mainMenu(int id)
 		AfxMessageBox(_T("Computer Graphics"));
 		break;
 	}
+}
+
+void objectDrawingOptionMenu(int option)
+{
+	selectedDrawingOption = option;
 }
 
 void rescaleWindow(bool up_or_down)
@@ -257,12 +278,17 @@ void initMenu()
 	glutAddMenuEntry("Rescale Window Up", RESCALE_WINDOW_MENU_ITEM_UP);
 	glutAddMenuEntry("Rescale Window Down", RESCALE_WINDOW_MENU_ITEM_DOWN);
 
+	int objectDrawingMenu = glutCreateMenu(objectDrawingOptionMenu);
+	glutAddMenuEntry("Add to Current Scene", ADD_TO_SCENE);
+	glutAddMenuEntry("Replace Current Scene", REPLACE_SCENE);
+
 	glutCreateMenu(mainMenu);
 	glutAddSubMenu("File", menuFile);
 	glutAddSubMenu("Options", optionsSubMenu);
 	glutAddSubMenu("Rescaling Window", rescaleMenu);
 	glutAddMenuEntry("Demo", MAIN_DEMO);
 	glutAddMenuEntry("About", MAIN_ABOUT);
+	glutAddSubMenu("Object Drawing Options", objectDrawingMenu);
 	
 	glutAttachMenu(GLUT_RIGHT_BUTTON);
 
