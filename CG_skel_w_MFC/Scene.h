@@ -1,5 +1,7 @@
 #pragma once
 
+
+#include "mat.h"
 #include "gl/glew.h"
 #include <vector>
 #include <string>
@@ -7,14 +9,18 @@
 using namespace std;
 
 class Model {
-protected:
+public:
+	virtual ~Model() {}
 	void virtual draw(Renderer* renderer) = 0;
 	virtual void setShowNormals(bool change);
+	virtual void setShowNormalsToVertices(bool change) = 0;
 	virtual void setShowBox(bool change) = 0;
 	virtual void translate(GLfloat x_trans, GLfloat y_trans, GLfloat z_trans) = 0;
-	virtual void rotate(GLfloat theta_angle, int mode) = 0;
-public: 
-	virtual ~Model() {}
+	virtual void rotate(GLfloat theta_angle, int axis) = 0;
+	virtual void scale(GLfloat x_scale, GLfloat y_scale, GLfloat z_scale) = 0;
+
+	virtual void applyWorldTransformation(const mat4& transformation) = 0;
+	virtual void applyModelTransformation(const mat4& transformation) = 0;
 };
 
 
@@ -55,26 +61,57 @@ public:
 class Scene {
 
 	vector<Model*> models;
-	int num_of_models;
 	vector<Light*> lights;
 	vector<Camera*> cameras;
 	Renderer* m_renderer;
 
+	bool drawCube;
+	PrimMeshModel meshCube;
+	PrimMeshModel meshSphere;
+	bool drawSphere;
+
 public:
-	Scene() {};
-	Scene(Renderer* renderer) : m_renderer(renderer) {};
+	Scene() : activeModel(0), activeLight(0), activeCamera(0), drawCube(false), drawSphere(false), meshCube(PrimMeshModel(false,false)), meshSphere(PrimMeshModel(false,false)) {}
+	Scene(Renderer* renderer) : m_renderer(renderer), activeModel(0), activeLight(0), activeCamera(0), drawCube(false), drawSphere(false), meshCube(PrimMeshModel(false, false)), meshSphere(PrimMeshModel(false, false)) {}
 	void loadOBJModel(string fileName);
 	void addMeshModel(Model* model);
+	void RemoveMeshModel(Model* model);
+	void addCamera(Camera* camera);
 	void draw();
 	void drawDemo();
 
 	void setShowNormalsForMeshModels(bool change);
+	void setShowNormalsToVerticesForMeshModels(bool change);
 	void setShowBoxForMeshModels(bool change);
-	void translateObjects(GLfloat x_trans, GLfloat y_trans, GLfloat z_trans);
-	void rescaleModels(GLfloat scale);
-	void rotateModels(GLfloat theta_angle, int mode);
-	void removeObjects();
-	void removeObjects(Model* model);
+	void translateObject(GLfloat x_trans, GLfloat y_trans, GLfloat z_trans, bool world_frame = false);
+	void scaleObject(GLfloat scale, bool world_frame = false);
+	void rotateObject(GLfloat theta_angle, int axis, bool world_frame = false);
+	void cycleSelectedObject();
+	void cycleActiveCamera();
+	Camera* getActiveCamera();
+
+	void setDrawCube(bool draw) 
+	{
+		if (drawCube && !draw) {
+			RemoveMeshModel(&meshCube);
+		}
+		else if (!drawCube && draw) {
+			meshCube = PrimMeshModel(true, false);
+			addMeshModel(&meshCube);
+		}
+		drawCube = draw;
+	}
+
+	void setDrawSphere(bool draw) {
+		if (drawSphere && !draw) {
+			RemoveMeshModel(&meshSphere);
+		}
+		else if (!drawSphere && draw) {
+			meshSphere = PrimMeshModel(false, true);
+			addMeshModel(&meshSphere);
+		}
+		drawSphere = draw;
+	}
 	int activeModel;
 	int activeLight;
 	int activeCamera;

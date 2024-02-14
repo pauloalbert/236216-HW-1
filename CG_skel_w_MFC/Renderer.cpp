@@ -4,18 +4,19 @@
 #include "InitShader.h"
 #include "GL\freeglut.h"
 //#include "imgui.h"
+#include "MeshModel.h"
 
 #define INDEX(width,x,y,c) (x+y*width)*3+c
 
 Renderer::Renderer() :m_width(512), m_height(512)
 {
 	InitOpenGLRendering();
-	CreateBuffers(512,512);
+	CreateBuffers(512, 512);
 }
-Renderer::Renderer(int width, int height) :m_width(width), m_height(height)
+Renderer::Renderer(int width, int height) : m_width(width), m_height(height)
 {
 	InitOpenGLRendering();
-	CreateBuffers(width,height);
+	CreateBuffers(width, height);
 }
 
 Renderer::~Renderer(void)
@@ -27,10 +28,10 @@ Renderer::~Renderer(void)
 void Renderer::CreateBuffers(int width, int height)
 {
 	//ReleaseBuffers();
-	m_width=width;
-	m_height=height;	
+	m_width = width;
+	m_height = height;
 	CreateOpenGLBuffer(); //Do not remove this line.
-	m_outBuffer = new float[3*m_width*m_height];
+	m_outBuffer = new float[3 * m_width * m_height];
 }
 
 void Renderer::ReleaseBuffers() {
@@ -44,15 +45,15 @@ void Renderer::ReleaseBuffers() {
 void Renderer::SetDemoBuffer()
 {
 	//vertical line
-	for(int i=0; i<m_width; i++)
+	for (int i = 0; i < m_width; i++)
 	{
-		m_outBuffer[INDEX(m_width,256,i,0)]=1;	m_outBuffer[INDEX(m_width,256,i,1)]=0;	m_outBuffer[INDEX(m_width,256,i,2)]=0;
+		m_outBuffer[INDEX(m_width, 256, i, 0)] = 1;	m_outBuffer[INDEX(m_width, 256, i, 1)] = 0;	m_outBuffer[INDEX(m_width, 256, i, 2)] = 0;
 
 	}
 	//horizontal line
-	for(int i=0; i<m_width; i++)
+	for (int i = 0; i < m_width; i++)
 	{
-		m_outBuffer[INDEX(m_width,i,256,0)]=1;	m_outBuffer[INDEX(m_width,i,256,1)]=0;	m_outBuffer[INDEX(m_width,i,256,2)]=1;
+		m_outBuffer[INDEX(m_width, i, 256, 0)] = 1;	m_outBuffer[INDEX(m_width, i, 256, 1)] = 0;	m_outBuffer[INDEX(m_width, i, 256, 2)] = 1;
 
 	}
 }
@@ -65,21 +66,59 @@ void Renderer::ResizeBuffers(int new_width, int new_height) {
 	}
 }
 
-void Renderer::ClearBuffer()
+void Renderer::ClearBuffer() {
+	std::fill(m_outBuffer, m_outBuffer + (m_width * m_height * 3), 0);
+}
+
+void Renderer::FillBuffer(float r, float g, float b)
 {
-	// Assuming you have a background color (adjust the values accordingly)
-	vec3 background_color = vec3(0.0, 0.0, 0.0);
 
 	// Fill the buffer with the background color
 	for (int y = 0; y < m_height; y++)
 	{
 		for (int x = 0; x < m_width; x++)
 		{
-			m_outBuffer[INDEX(m_width, x, y, 0)] = background_color.x;
-			m_outBuffer[INDEX(m_width, x, y, 1)] = background_color.y;
-			m_outBuffer[INDEX(m_width, x, y, 2)] = background_color.z;
+			DrawPixel(x, y, r, g, b);
 		}
 	}
+}
+
+void Renderer::FillEdges(float percent, float r, float g, float b) {
+	if (percent <= 0) {
+		return;
+	}
+	if (percent >= 0.5) {
+		percent = 0.5;
+	}
+	for (int i = 0; i <= (int)(m_height * percent); i++) {
+		for (int j = 0; j < m_width; j++) {
+			DrawPixel(j, i, r, g, b);
+			DrawPixel(j, m_height - i - 1, r, g, b);
+		}
+	}
+	for (int j = 0; j < (int)(m_width * percent); j++) {
+		for (int i = (int)(m_height * percent) - 1; i < m_height - (int)(m_height * percent) - 1; i++) {
+			DrawPixel(j, i, r, g, b);
+			DrawPixel(m_width - j - 1, i, r, g, b);
+		}
+	}
+}
+
+vec2 normalizeVectorWithFixedPoint(const vec2& fixedPoint, const vec2& pointToNormalize)
+{
+	float directionX = pointToNormalize.x - fixedPoint.x;
+	float directionY = pointToNormalize.y - fixedPoint.y;
+
+	float length = std::sqrt(directionX * directionX + directionY * directionY);
+
+	// Check if the length is not zero to avoid division by zero
+	if (length > 0.0f) {
+		// Normalize the direction vector and scale it to the original length
+		return vec2(fixedPoint.x + directionX / length, fixedPoint.y + directionY / length);
+	}
+
+	// Return the original point if the length is zero
+	return pointToNormalize;
 }
 
 /*
@@ -89,13 +128,6 @@ void Renderer::ClearBuffer()
 */
 void Renderer::DrawLine(vec2 vert1, vec2 vert2, int specialColor, bool clear)
 {
-	//Temp solution. drawing a line out of bounds crashes the code!
-	/*if (vert1.x < 1 || vert2.x < 1 || vert1.x >= m_width - 1 || vert2.x >= m_width - 1 ||
-		vert1.y < 1 || vert2.y < 1 || vert2.y >= m_height - 1 || vert1.y >= m_height - 1)
-	{
-		return;
-	}*/
-
 	//flip the axis so that slope is -1 <= m <= 1
 	bool flipped = false;
 	if (abs(vert1.y - vert2.y) > abs(vert1.x - vert2.x)) {
@@ -135,67 +167,29 @@ void Renderer::DrawLine(vec2 vert1, vec2 vert2, int specialColor, bool clear)
 
 		//light the pixel
 		if (flipped) {
-			if (x < 0 || x >= m_width-1 || y < 0 || y >= m_height-1)
-			{
-				continue;
-			}
-			if (specialColor == 1) {
-				m_outBuffer[INDEX(m_width, y, x, 0)] = 0;	m_outBuffer[INDEX(m_width, y, x, 1)] = 1;	m_outBuffer[INDEX(m_width, y, x, 2)] = 1;
-			}
-			else if (specialColor == 2) {
-				m_outBuffer[INDEX(m_width, y, x, 0)] = 1;	m_outBuffer[INDEX(m_width, y, x, 1)] = 0;	m_outBuffer[INDEX(m_width, y, x, 2)] = 0;
-			}
-			else {
-				m_outBuffer[INDEX(m_width, y, x, 0)] = 1;	m_outBuffer[INDEX(m_width, y, x, 1)] = 1;	m_outBuffer[INDEX(m_width, y, x, 2)] = 1;
-			}
-
-			// clear the pixel if specified
-			if (clear)
-			{
-				if (specialColor == 2) {
-					if (m_outBuffer[INDEX(m_width, y, x, 0)] != 0 && m_outBuffer[INDEX(m_width, y, x, 1)] != 1 && m_outBuffer[INDEX(m_width, y, x, 2)] != 1) {
-						m_outBuffer[INDEX(m_width, y, x, 0)] = 0; // set to background color
-						m_outBuffer[INDEX(m_width, y, x, 1)] = 0;
-						m_outBuffer[INDEX(m_width, y, x, 2)] = 0;
-					}
-				}
-				
-			}
-			//inverted y and x (because we swapped them in the beginning)
+			DrawPixelSafe(y, x, !clear, !clear * (specialColor != 1), !clear * (specialColor != 2));
 		}
 		else {
-			if (x < 0 || x >= m_width || y < 0 || y >= m_height)
-			{
-				continue;
-			}
-			if (specialColor == 1) {
-				m_outBuffer[INDEX(m_width, x, y, 0)] = 0;	m_outBuffer[INDEX(m_width, x, y, 1)] = 1;	m_outBuffer[INDEX(m_width, x, y, 2)] = 1;
-			}
-			else if (specialColor == 2) {
-				m_outBuffer[INDEX(m_width, x, y, 0)] = 1;	m_outBuffer[INDEX(m_width, x, y, 1)] = 0;	m_outBuffer[INDEX(m_width, x, y, 2)] = 0;
-			}
-			else {
-				m_outBuffer[INDEX(m_width, x, y, 0)] = 1;	m_outBuffer[INDEX(m_width, x, y, 1)] = 1;	m_outBuffer[INDEX(m_width, x, y, 2)] = 1;
-			}
-			// clear the pixel if specified
-			if (clear)
-			{
-				if (specialColor == 2) {
-					if (m_outBuffer[INDEX(m_width, x, y, 0)] != 0 && m_outBuffer[INDEX(m_width, x, y, 1)] != 1 && m_outBuffer[INDEX(m_width, x, y, 2)] != 1) {
-						m_outBuffer[INDEX(m_width, x, y, 0)] = 0; // set to background color
-						m_outBuffer[INDEX(m_width, x, y, 1)] = 0;
-						m_outBuffer[INDEX(m_width, x, y, 2)] = 0;
-					}
-				}
-			}
+			DrawPixelSafe(x, y, !clear, !clear * (specialColor != 1), !clear * (specialColor != 2));
 		}
 
 	}
 }
 
+void Renderer::DrawPixel(int x, int y, float r, float g, float b) {
+	m_outBuffer[INDEX(m_width, x, y, 0)] = r;	m_outBuffer[INDEX(m_width, x, y, 1)] = g;	m_outBuffer[INDEX(m_width, x, y, 2)] = b;
+
+}
+
+void Renderer::DrawPixelSafe(int x, int y, float r, float g, float b) {
+	if (x < 0 || x >= m_width || y < 0 || y >= m_height)
+		return;
+	DrawPixel(x, y, r, g, b);
+}
+
 /**
  * This function takes a world space object, and draws it's triangles on screen.
- * 
+ *
  * This function
  * - converts object space to camera space (CameraTransform)
  * - converts camera space to screen space (3D to 2D)
@@ -204,25 +198,21 @@ void Renderer::DrawLine(vec2 vert1, vec2 vert2, int specialColor, bool clear)
  * vertices: vector of the camera space vertices
  * normals: directions of the respective world space normals.
  */
-void Renderer::DrawTriangles(const vector<vec3>* vertices, const vector<vec3>* normals, bool draw_normals)
+void Renderer::DrawTriangles(const vector<vec3>* vertices, const vector<vec3>* edge_normals, bool draw_normals)
 {
 	// Clear the buffer before drawing new content
-	ClearBuffer();
-	
+
 	//if normals isn't supplied, give this iterator some garbage value (vertices->begin())
-	vector<vec3>::const_iterator normal = normals != NULL ? normals->begin() : vertices->begin();
-	for(auto it = vertices->begin(); it != vertices->end(); ++it, ++normal){
+	vector<vec3>::const_iterator normal = edge_normals != NULL ? edge_normals->begin() : vertices->begin();
+	for (auto it = vertices->begin(); it != vertices->end(); ++it, ++normal) {
 		//get the next face
 		vec4 vert1 = vec4(*it);
-		vec4 vert2 = vec4(*(it+1));
-		vec4 vert3 = vec4(*(it+2));
+		vec4 vert2 = vec4(*(it + 1));
+		vec4 vert3 = vec4(*(it + 2));
 		it = it + 2;
 
-		vec4 normCoor1 = vec4(*normal);
-		vec4 normCoor2 = normCoor1 + vec4(*(normal + 1));
-		
-		normal = normal + 2;
-		
+		vec4 normCoor1, normCoor2;
+
 		/*
 		TRANSFORMATIONS + PROJECTION ( P * Tc-1 * v)
 		*/
@@ -230,55 +220,88 @@ void Renderer::DrawTriangles(const vector<vec3>* vertices, const vector<vec3>* n
 		vert2 = toEuclidian(mat_project * (mat_transform_inverse * vert2));
 		vert3 = toEuclidian(mat_project * (mat_transform_inverse * vert3));
 
-		normCoor1 = toEuclidian(mat_project * (mat_transform_inverse * normCoor1));
-		normCoor2 = toEuclidian(mat_project * (mat_transform_inverse * normCoor2));
+		if (vert1.z < -1 || vert1.z > 1 || vert2.z < -1 || vert2.z > 1 || vert3.z < -1 || vert3.z > 1) {
+			continue;
+		}
+		vec3 norm_dir = calculateNormal(toVec3(vert1), toVec3(vert2), toVec3(vert3)) / 5.f;
+		normCoor1 = (vert1 + vert2 + vert3) / 3;
+		normCoor2 = normCoor1 - norm_dir;
 		/*
 		Clipspace coordinates to screenspace coordinates
 		*/
-		vec2 p1 = vec2(RANGE(vert1.x,-1,1,0,m_width), RANGE(vert1.y,-1,1,0,m_height));
-		vec2 p2 = vec2(RANGE(vert2.x,-1,1,0,m_width), RANGE(vert2.y,-1,1,0,m_height));
-		vec2 p3 = vec2(RANGE(vert3.x,-1,1,0,m_width), RANGE(vert3.y,-1,1,0,m_height));
-	
+		vec2 p1 = vec2(RANGE(vert1.x, -1, 1, 0, m_width), RANGE(vert1.y, -1, 1, 0, m_height));
+		vec2 p2 = vec2(RANGE(vert2.x, -1, 1, 0, m_width), RANGE(vert2.y, -1, 1, 0, m_height));
+		vec2 p3 = vec2(RANGE(vert3.x, -1, 1, 0, m_width), RANGE(vert3.y, -1, 1, 0, m_height));
+
 		vec2 n1 = vec2(RANGE(normCoor1.x, -1, 1, 0, m_width), RANGE(normCoor1.y, -1, 1, 0, m_height));
 		vec2 n2 = vec2(RANGE(normCoor2.x, -1, 1, 0, m_width), RANGE(normCoor2.y, -1, 1, 0, m_height));
 
-		if(normals){
-			if (draw_normals) {
-				DrawLine(n1, n2, 1, false);
-			}
-			DrawLine(p1, p2, 0, false);
-			DrawLine(p2, p3, 0, false);
-			DrawLine(p3, p1, 0, false);
-			
-		}
-		else{
-			DrawLine(p1, p2, 0, false);
-			DrawLine(p2, p3, 0, false);
-			DrawLine(p3, p1, 0, false);
-			//DrawLine(vert1,vert2);
+
+		DrawLine(p1, p2);
+		DrawLine(p2, p3);
+		DrawLine(p3, p1);
+
+		//Normal:
+		if (draw_normals) {
+			DrawLine(n1, n2, 1);
 		}
 	}
 }
 
-void Renderer::DrawBoundingBox(const vec3* bounding_box, bool draw_box) 
+void Renderer::DrawNormalsToVertices(const vector<vec3>* vertices, const vector<vec3>* vertex_normals, bool draw_normals)
+{
+	if (!vertex_normals) {
+		return;
+	}
+
+	//if normals isn't supplied, give this iterator some garbage value (vertices->begin())
+	vector<vec3>::const_iterator normal =  vertex_normals->begin();
+	for (auto it = vertices->begin(); it != vertices->end(); it++, normal++) {
+        // Get the next face
+        vec4 vert1 = vec4(*it);
+        vec4 normCoor = vec4(*normal);
+
+        /*
+        TRANSFORMATIONS + PROJECTION (P * Tc-1 * v)
+        */
+        vert1 = toEuclidian(mat_project * (mat_transform_inverse * vert1));
+        normCoor = toEuclidian(mat_project * (mat_transform_inverse * normCoor));
+
+        // Normalize the vector without applying the range
+		vec2 normalized_end_point = normalizeVectorWithFixedPoint(vec2(vert1.x + normCoor.x, vert1.y + normCoor.y), vec2(vert1.x, vert1.y));
+
+		// Scale down the normalized vector (make the normals smaller)
+		float scale_factor = 0.5;  // Adjust this factor as needed
+		normalized_end_point *= scale_factor;
+
+		// Apply the range to the normalized point
+		vec2 first_point = vec2(RANGE(normalized_end_point.x, -1, 1, 0, m_width), RANGE(normalized_end_point.y, -1, 1, 0, m_height));
+
+		// Normal:
+		if (draw_normals) {
+			DrawLine(first_point, vec2(RANGE(vert1.x, -1, 1, 0, m_width), RANGE(vert1.y, -1, 1, 0, m_height)), 1);
+		}
+    }
+}
+
+void Renderer::DrawBoundingBox(const vec3* bounding_box, bool draw_box)
 {
 	if (!bounding_box || !draw_box) {
 		return;
 	}
 
-	// Small offset to break alignment
-	const float epsilon = 0.01f;
-
 	vec4 new_bounding_box[8];
 	vec2 bounding_box_in_vectwo[8];
-
 	for (int i = 0; i < 8; i++) {
+		// Convert 3D point to homogeneous coordinates
 		vec4 homogeneous_point = vec4(bounding_box[i], 1.0f);
+
 		// Apply transformations
 		new_bounding_box[i] = toEuclidian(mat_project * (mat_transform_inverse * homogeneous_point));
 		bounding_box_in_vectwo[i] = vec2(RANGE(new_bounding_box[i].x, -1, 1, 0, m_width), RANGE(new_bounding_box[i].y, -1, 1, 0, m_height));
-	}
+		//bounding_box_in_vectwo[i] = vec2(new_bounding_box[i].x, new_bounding_box[i].y);
 
+	}
 	// Define the indices to connect vertices in a sequential manner
 	const int indices[12][2] = {
 		{0, 1}, {1, 3}, {3, 2}, {2, 0},
@@ -288,39 +311,38 @@ void Renderer::DrawBoundingBox(const vec3* bounding_box, bool draw_box)
 
 	// Draw lines to connect the vertices of the bounding box using the defined indices
 	for (int i = 0; i < 12; ++i) {
+		if (new_bounding_box[indices[i][0]].z < -1 || new_bounding_box[indices[i][0]].z > 1 ||
+			new_bounding_box[indices[i][1]].z < -1 || new_bounding_box[indices[i][0]].z > 1) {
+			continue;
+		}
 		DrawLine(bounding_box_in_vectwo[indices[i][0]], bounding_box_in_vectwo[indices[i][1]], 2, !draw_box);
 	}
-	/*DrawLine(bounding_box_in_vectwo[4], bounding_box_in_vectwo[5], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[5], bounding_box_in_vectwo[7], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[7], bounding_box_in_vectwo[6], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[6], bounding_box_in_vectwo[4], 2, !draw_box);
-
-	DrawLine(bounding_box_in_vectwo[0], bounding_box_in_vectwo[4], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[1], bounding_box_in_vectwo[5], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[2], bounding_box_in_vectwo[6], 2, !draw_box);
-	DrawLine(bounding_box_in_vectwo[3], bounding_box_in_vectwo[7], 2, !draw_box);
-	*/
-	
 }
 
 void Renderer::DrawPoint(const vec3& vertex)
 {
 	std::cout << vertex << std::endl;
-   m_outBuffer[INDEX(m_width, CLAMP(toupper(100*vertex.x),0,m_width), CLAMP(toupper(100*vertex.y),0,m_height),0)] = 0;
-   m_outBuffer[INDEX(m_width, CLAMP(toupper(100*vertex.x),0,m_width), CLAMP(toupper(100*vertex.y),0,m_height),1)] = 1;
-   //m_outBuffer[INDEX(m_width, toupper(100*vertex.x), toupper(100*vertex.y), 2)] = 0;
+	m_outBuffer[INDEX(m_width, CLAMP(toupper(100 * vertex.x), 0, m_width), CLAMP(toupper(100 * vertex.y), 0, m_height), 0)] = 0;
+	m_outBuffer[INDEX(m_width, CLAMP(toupper(100 * vertex.x), 0, m_width), CLAMP(toupper(100 * vertex.y), 0, m_height), 1)] = 1;
+	//m_outBuffer[INDEX(m_width, toupper(100*vertex.x), toupper(100*vertex.y), 2)] = 0;
 }
 
 
-void Renderer::SetCameraTransformInverse(const mat4& cTransform){
+void Renderer::SetCameraTransformInverse(const mat4& cTransform) {
 	mat_transform_inverse = cTransform;
 }
-void Renderer::SetProjection(const mat4& projection){
+void Renderer::SetProjection(const mat4& projection) {
 	mat_project = projection;
 }
 
-void Renderer::Init(){
-	CreateBuffers(m_width,m_height);
+void Renderer::setCameraMatrixes(const mat4& cTransformInverse, const mat4& Projection) {
+	SetCameraTransformInverse(cTransformInverse);
+	SetProjection(Projection);
+}
+
+
+void Renderer::Init() {
+	CreateBuffers(m_width, m_height);
 
 }
 
@@ -338,7 +360,7 @@ void Renderer::InitOpenGLRendering()
 	GLuint buffer;
 	glBindVertexArray(gScreenVtc);
 	glGenBuffers(1, &buffer);
-	const GLfloat vtc[]={
+	const GLfloat vtc[] = {
 		-1, -1,
 		1, -1,
 		-1, 1,
@@ -346,31 +368,31 @@ void Renderer::InitOpenGLRendering()
 		1, -1,
 		1, 1
 	};
-	const GLfloat tex[]={
+	const GLfloat tex[] = {
 		0,0,
 		1,0,
 		0,1,
 		0,1,
 		1,0,
-		1,1};
+		1,1 };
 	glBindBuffer(GL_ARRAY_BUFFER, buffer);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vtc)+sizeof(tex), NULL, GL_STATIC_DRAW);
-	glBufferSubData( GL_ARRAY_BUFFER, 0, sizeof(vtc), vtc);
-	glBufferSubData( GL_ARRAY_BUFFER, sizeof(vtc), sizeof(tex), tex);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vtc) + sizeof(tex), NULL, GL_STATIC_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vtc), vtc);
+	glBufferSubData(GL_ARRAY_BUFFER, sizeof(vtc), sizeof(tex), tex);
 
-	GLuint program = InitShader( "vshader.glsl", "fshader.glsl" );
-	glUseProgram( program );
-	GLint  vPosition = glGetAttribLocation( program, "vPosition" );
+	GLuint program = InitShader("vshader.glsl", "fshader.glsl");
+	glUseProgram(program);
+	GLint  vPosition = glGetAttribLocation(program, "vPosition");
 
-	glEnableVertexAttribArray( vPosition );
-	glVertexAttribPointer( vPosition, 2, GL_FLOAT, GL_FALSE, 0,
-		0 );
+	glEnableVertexAttribArray(vPosition);
+	glVertexAttribPointer(vPosition, 2, GL_FLOAT, GL_FALSE, 0,
+		0);
 
-	GLint  vTexCoord = glGetAttribLocation( program, "vTexCoord" );
-	glEnableVertexAttribArray( vTexCoord );
-	glVertexAttribPointer( vTexCoord, 2, GL_FLOAT, GL_FALSE, 0,
-		(GLvoid *) sizeof(vtc) );
-	glProgramUniform1i( program, glGetUniformLocation(program, "texture"), 0 );
+	GLint  vTexCoord = glGetAttribLocation(program, "vTexCoord");
+	glEnableVertexAttribArray(vTexCoord);
+	glVertexAttribPointer(vTexCoord, 2, GL_FLOAT, GL_FALSE, 0,
+		(GLvoid*)sizeof(vtc));
+	glProgramUniform1i(program, glGetUniformLocation(program, "texture"), 0);
 	a = glGetError();
 }
 
@@ -384,6 +406,13 @@ void Renderer::CreateOpenGLBuffer()
 
 void Renderer::SwapBuffers()
 {
+	UpdateBuffer();
+	//clear the new buffer
+	ClearBuffer();
+}
+
+//Doesn't clear the buffer afterwards!
+void Renderer::UpdateBuffer() {
 
 	int a = glGetError();
 	glActiveTexture(GL_TEXTURE0);
@@ -400,4 +429,5 @@ void Renderer::SwapBuffers()
 	a = glGetError();
 	glutSwapBuffers();
 	a = glGetError();
+
 }

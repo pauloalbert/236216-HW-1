@@ -64,16 +64,19 @@ MeshModel::MeshModel(string fileName)
 {
 	vertex_count = 0;
 	loadFile(fileName);
-	show_normals = false;
+	show_face_normals = false;
+	show_box = false;
+	show_vertex_normals = false;
+	vn_in_file = false;
 }
 
 MeshModel::~MeshModel(void)
 {
 	delete[] vertex_positions;
+	if (normals_to_vertices) {
+		delete[] normals_to_vertices;
+	}
 	delete[] normals;
-	delete[] bounding_box;
-	delete _world_transform;
-	delete _normal_transform;
 }
 
 void MeshModel::loadFile(string fileName)
@@ -81,6 +84,8 @@ void MeshModel::loadFile(string fileName)
 	ifstream ifile(fileName.c_str());
 	vector<FaceIdcs> faces;
 	vector<vec3> vertices;
+	vector<vec3> normals_to_vert;
+	
 	// while not end of file
 	while (!ifile.eof())
 	{
@@ -100,7 +105,9 @@ void MeshModel::loadFile(string fileName)
 		else if (lineType == "f")	//BUG FIXED
 			faces.push_back(issLine);
 		else if (lineType == "vn") {
-			//normal
+			//normal to vertices
+			vn_in_file = true;
+			normals_to_vert.push_back(vec3fFromStream(issLine));
 		}
 		else if (lineType == "vt") {
 			//texture
@@ -123,27 +130,34 @@ void MeshModel::loadFile(string fileName)
 	face_count = faces.size();
 	vertex_positions = new vec3[3 * faces.size()]; //In our project every face is a triangle. BUG FIXED
 	normals = new vec3[3 * faces.size()];
-	
+	normals_to_vertices = new vec3[3 * faces.size()];
+
 	// iterate through all stored faces and create triangles
 	int k = 0;
 	for (vector<FaceIdcs>::iterator it = faces.begin(); it != faces.end(); ++it)
 	{
 		for (int i = 0; i < 3; i++)
 		{
+			if (vn_in_file) {
+				normals_to_vertices[k] = normals_to_vert[it->v[i] - 1];
+			}
 			vertex_positions[k++] = vertices[it->v[i] - 1]; 	//Take the face indexes from the vertix array BUG FIXED
 			vertex_count++;
 		}
 	}
 	normalToFace();
 	calculateBoundingBox();
+	std::cout << "here is okay in loadFile after normalToFace" << std::endl;
 }
 
 void MeshModel::draw(Renderer* renderer)
 {
 	std::vector<vec3> vec(vertex_positions, vertex_positions + (3 * face_count));
 	std::vector<vec3> norm(normals, normals + (3 * face_count));
-	renderer->DrawTriangles(&vec, &norm, show_normals);
-	
+	std::vector<vec3> norm_to_vert(normals_to_vertices, normals_to_vertices + (3 * face_count));
+	renderer->DrawTriangles(&vec, &norm, show_face_normals);
+	renderer->DrawNormalsToVertices(&vec, &norm_to_vert, show_vertex_normals);
+
 	renderer->DrawBoundingBox(bounding_box, show_box);
 }
 
@@ -157,9 +171,10 @@ void MeshModel::translate(GLfloat x_trans, GLfloat y_trans, GLfloat z_trans)
 		vertex_positions[i].z += z_trans;
 		i++;
 	}
+	calculateBoundingBox();
 }
 
-vec3 MeshModel::translatePoint(vec3 point, GLfloat x_trans, GLfloat y_trans, GLfloat z_trans) 
+vec3 MeshModel::translatePoint(vec3 point, GLfloat x_trans, GLfloat y_trans, GLfloat z_trans)
 {
 	vec3 new_point;
 	new_point.x = point.x + x_trans;
@@ -182,57 +197,10 @@ void MeshModel::scale(GLfloat x_scale, GLfloat y_scale, GLfloat z_scale)
 		vertex_positions[i].z *= z_scale;
 		i++;
 	}
-	normalToFace();
 	calculateBoundingBox();
 }
 
-void RotateBoundingBox(vec3 bounding_box[8], const mat4& rotation_matrix)
-{
-	for (int i = 0; i < 8; i++) {
-		vec3 current_vertex = bounding_box[i];
-		vec4 curr_rotated_point = rotation_matrix * vec4(current_vertex, 1.0f);
-
-		// Update the vertex with the rotated coordinates
-		bounding_box[i] = vec3(curr_rotated_point.x, curr_rotated_point.y, curr_rotated_point.z);
-	}
-}
-
-mat4 rotateX(GLfloat theta_angle) {
-	mat4 rotation_matrix;
-	rotation_matrix[1].y = cos(theta_angle);
-	rotation_matrix[1].z = -sin(theta_angle);
-	rotation_matrix[2].y = sin(theta_angle);
-	rotation_matrix[2].z = cos(theta_angle);
-	return rotation_matrix;
-}
-
-mat4 rotateY(GLfloat theta_angle) {
-	mat4 rotation_matrix;
-	rotation_matrix[0].x = cos(theta_angle);
-	rotation_matrix[0].z = sin(theta_angle);
-	rotation_matrix[2].x = -sin(theta_angle);
-	rotation_matrix[2].z = cos(theta_angle);
-	/*((cos(theta_angle), 0, sin(theta_angle), 0),
-		(0, 1, 0, 0),
-		(-sin(theta_angle), 0, cos(theta_angle), 0),
-		(0, 0, 0, 1));*/
-	return rotation_matrix;
-}
-
-mat4 rotateZ(GLfloat theta_angle) {
-	mat4 rotation_matrix;
-	rotation_matrix[0].x = cos(theta_angle);
-	rotation_matrix[0].y = -sin(theta_angle);
-	rotation_matrix[1].x = sin(theta_angle);
-	rotation_matrix[1].y = cos(theta_angle);
-	/*((cos(theta_angle), -sin(theta_angle), 0, 0),
-		(sin(theta_angle), cos(theta_angle), 0, 0),
-		(0, 0, 1, 0),
-		(0, 0, 0, 1));*/
-	return rotation_matrix;
-}
-
-float Radians(float degrees) 
+float Radians(float degrees)
 {
 	return degrees * (M_PI / 180.0f);
 }
@@ -248,13 +216,13 @@ void MeshModel::rotate(GLfloat theta_degree, int mode)
 	int i = 0;
 	mat4 rotation_matrix;
 	if (mode == 0) {
-		rotation_matrix = rotateX(theta);
+		rotation_matrix = RotateX(theta);
 	}
 	else if (mode == 1) {
-		rotation_matrix = rotateY(theta);
+		rotation_matrix = RotateY(theta);
 	}
 	else if (mode == 2) {
-		rotation_matrix = rotateZ(theta);
+		rotation_matrix = RotateZ(theta);
 	}
 	else {
 		std::cout << "something is wrong" << std::endl;
@@ -263,12 +231,13 @@ void MeshModel::rotate(GLfloat theta_degree, int mode)
 	while (i < vertex_count) {
 		vec3 current_vertex = vertex_positions[i];
 		vec4 curr_rotated_point = vec4(rotation_matrix * vec4(current_vertex, 1.0f));
-		
+
 		vertex_positions[i] = vec3(curr_rotated_point.x, curr_rotated_point.y, curr_rotated_point.z);
 		i++;
 	}
-	RotateBoundingBox(bounding_box, rotation_matrix);
 	normalToFace();
+	calculateBoundingBox();
+
 }
 
 vec3 calculateNormal(vec3 first_point, vec3 second_point, vec3 third_point)
@@ -283,20 +252,46 @@ vec3 calculateNormal(vec3 first_point, vec3 second_point, vec3 third_point)
 
 void MeshModel::normalToFace()
 {
+	/*
 	int i = 0;
-	while(i < vertex_count) {
+	while (i < vertex_count) {
 		vec3 curr_normal = calculateNormal(vertex_positions[i], vertex_positions[i + 1], vertex_positions[i + 2]);
 		normals[i] = curr_normal;  // Store the normal vector
-		normals[i+ 1] = (vertex_positions[i] + vertex_positions[i + 1] + vertex_positions[i + 2]) / 3.0f;
+		normals[i + 1] = (vertex_positions[i] + vertex_positions[i + 1] + vertex_positions[i + 2]) / 3.0f;
 		i += 3;
 
+	} 
+	*/
+	int i = 0;
+	for (int j = 0; j < face_count; ++j)
+	{
+		// Calculate the face normal
+		vec3 face_normal = calculateNormal(vertex_positions[i], vertex_positions[i + 1], vertex_positions[i + 2]);
+		normals[i] = face_normal;  // Store the normal vector
+		normals[i + 1] = (vertex_positions[i] + vertex_positions[i + 1] + vertex_positions[i + 2]) / 3.0f;
+		// Iterate through the vertices involved in the current face normal calculation
+		if (!vn_in_file) {
+			for (int k = 0; k < 3; ++k)
+			{
+				// Use the normal corresponding to the current vertex
+				normals_to_vertices[i] += face_normal;
+				i++;
+			}
+		}
+		
+	}
+
+	// Normalize the accumulated normals for each vertex
+	for (int i = 0; i < vertex_count; ++i)
+	{
+		normals_to_vertices[i] = normalize(normals_to_vertices[i]);
 	}
 	//draw();
 }
 
 void MeshModel::calculateBoundingBox()
 {
-	
+
 	GLfloat max_x = vertex_positions[0].x;
 	GLfloat min_x = vertex_positions[0].x;
 
@@ -311,40 +306,56 @@ void MeshModel::calculateBoundingBox()
 		if (vertex_positions[i].x > max_x)
 		{
 			max_x = vertex_positions[i].x;
-		} else if (vertex_positions[i].x < min_x)
+		}
+		else if (vertex_positions[i].x < min_x)
 		{
 			min_x = vertex_positions[i].x;
 		}
 		if (vertex_positions[i].y > max_y)
 		{
 			max_y = vertex_positions[i].y;
-		} else if (vertex_positions[i].y < min_y)
+		}
+		else if (vertex_positions[i].y < min_y)
 		{
 			min_y = vertex_positions[i].y;
 		}
 		if (vertex_positions[i].z > max_z)
 		{
 			max_z = vertex_positions[i].z;
-		}else if (vertex_positions[i].z < min_z)
+		}
+		else if (vertex_positions[i].z < min_z)
 		{
 			min_z = vertex_positions[i].z;
 		}
 		i++;
 	}
-	GLfloat epsilon = 0.01f;
-	bounding_box[0] = vec3(max_x+epsilon, max_y+epsilon, max_z);
+	bounding_box[0] = vec3(max_x, max_y, max_z);
 	bounding_box[1] = vec3(max_x, max_y, min_z);
-	bounding_box[2] = vec3(max_x+epsilon, min_y-epsilon, max_z);
+	bounding_box[2] = vec3(max_x, min_y, max_z);
 	bounding_box[3] = vec3(max_x, min_y, min_z);
-	bounding_box[4] = vec3(min_x-epsilon, max_y+epsilon, max_z);
+	bounding_box[4] = vec3(min_x, max_y, max_z);
 	bounding_box[5] = vec3(min_x, max_y, min_z);
-	bounding_box[6] = vec3(min_x-epsilon, min_y-epsilon, max_z);
+	bounding_box[6] = vec3(min_x, min_y, max_z);
 	bounding_box[7] = vec3(min_x, min_y, min_z);
 }
 
-void MeshModel::setShowNormals(bool change) 
+
+
+void MeshModel::applyWorldTransformation(const mat4& transformation) {
+	_world_transform = transformation * _world_transform;
+}
+void MeshModel::applyModelTransformation(const mat4& transformation) {
+	//_model_transform = transformation * _model_transform;
+}
+
+void MeshModel::setShowNormals(bool change)
 {
-	show_normals = change;
+	show_face_normals = change;
+}
+
+void MeshModel::setShowNormalsToVertices(bool change)
+{
+	show_vertex_normals = change;
 }
 
 void MeshModel::setShowBox(bool change)

@@ -25,45 +25,128 @@
 
 #define BUFFER_OFFSET( offset )   ((GLvoid*) (offset))
 
-#define FILE_OPEN 1
-#define MAIN_DEMO 2
-#define MAIN_ABOUT 3
 
-#define RESCALE_WINDOW_MENU_ITEM_UP 4
-#define RESCALE_WINDOW_MENU_ITEM_DOWN 5
-#define DRAW_NORMALS 1
-#define HIDE_NORMALS 2
-#define DRAW_BOUNDING_BOX 3
-#define HIDE_BOUNDING_BOX 4
+enum MENU_STATES {
+	OPEN_FILE_OBJ,
+	ADD_CAMERA_ORTHO,
+	ADD_CAMERA_PROJECTION,
+	MAIN_DEMO,
+	MAIN_ABOUT,
 
-#define ADD_TO_SCENE 1
-#define REPLACE_SCENE 2
+	RESCALE_WINDOW_MENU_ITEM_UP,
+	RESCALE_WINDOW_MENU_ITEM_DOWN,
+
+	DRAW_NORMALS,
+	HIDE_NORMALS,
+	DRAW_VERTEX_NORMALS,
+	HIDE_VERTEX_NORMALS,
+	DRAW_BOUNDING_BOX,
+	HIDE_BOUNDING_BOX,
+
+	DRAW_CUBE,
+	DRAW_SPHERE,
+	HIDE_CUBE,
+	HIDE_SPHERE,
+
+	PYRAMID,
+	CUBE
+};
 
 Scene* scene;
 Renderer* renderer;
-Camera* camera;
 float m_time;
 
 int last_x, last_y;
 bool lb_down, rb_down, mb_down;
-int selectedDrawingOption = ADD_TO_SCENE; // Default option
 
 //----------------------------------------------------------------------------
+// Camera + Scene modiications
+//----------------------------------------------------------------------------
+
+void swapCameras() {
+	scene->cycleActiveCamera();
+	renderer->setCameraMatrixes(scene->getActiveCamera()->getTransformInverse(), scene->getActiveCamera()->getProjection());
+	glutPostRedisplay();
+}
+
+#define TRY_FLOAT(var, text) try { var = std::stof(text); } catch (const std::invalid_argument& e) {return;} catch (const std::out_of_range& e) {return;}
+void addProjCamera() {
+	int result = AfxMessageBox(_T("Enter Projection data in the TERMINAL.\npress CANCEL if you do not wish to continue."), MB_ICONINFORMATION | MB_OKCANCEL);
+	if (result == IDCANCEL) {
+		return;
+	}
+
+	Camera* camera = new Camera();
+
+	std::cout << "enter aspect ratio: ";
+	std::string userInput;
+	std::cin >> userInput;
+	float aspect_ratio = 1;
+	TRY_FLOAT(aspect_ratio, userInput);
+
+
+	camera->LookAt(vec3(1, 1, 1), vec3(-1, 0, 0), vec3(0, 1, 0));
+	//TEMP ORTHOGRAPHIC
+	camera->Perspective(1, 1, -1, -2);
+	scene->addCamera(camera);
+	glutPostRedisplay();
+}
+
+void addOrthoCamera() {
+
+	int result = AfxMessageBox(_T("You will be sent to the CMD to input the Orthographic specs.\npress CANCEL if you do not wish to continue."), MB_ICONINFORMATION | MB_OKCANCEL);
+	if (result == IDCANCEL) {
+		return;
+	}
+
+	renderer->FillEdges(0.05, 0.9, 0.1, 0.1);
+	glutPostRedisplay();
+	Camera* camera = new Camera();
+
+	std::cout << "enter aspect ratio: ";
+	std::string userInput;
+	std::cin >> userInput;
+	float aspect_ratio = 1;
+	try {
+		// Try to convert the input string to a float
+		aspect_ratio = std::stof(userInput);
+
+	}
+	catch (const std::invalid_argument& e) {
+		std::cerr << "Invalid argument: " << e.what() << std::endl;
+		return;
+	}
+	catch (const std::out_of_range& e) {
+		std::cerr << "Out of range: " << e.what() << std::endl;
+		return;
+	}
+
+	//std::cout << "enter z-min: ";
+	//std::string userInput2;
+	//std::cin >> userInput2;
+
+	camera->LookAt(vec3(1, 1, 1), vec3(-1, 0, 0), vec3(0, 1, 0));
+	camera->Ortho(-1, 1, -1, 1, -0.5, -5);
+	scene->addCamera(camera);
+	glutPostRedisplay();
+}
+
+void readFromFile() {
+	CFileDialog dlg(TRUE, _T(".obj"), NULL, NULL, _T("*.obj|*.*"));
+	if (dlg.DoModal() == IDOK)
+	{
+		std::string s((LPCTSTR)dlg.GetPathName());
+		scene->loadOBJModel((LPCTSTR)dlg.GetPathName());
+		glutPostRedisplay();
+	}
+}
+//----------------------------------------------------------------------------
 // Callbacks
+//----------------------------------------------------------------------------
 
-void display(void)
-{
-	//Call the scene and ask it to draw itself
-	std::cout << "<FRAME>" << std::endl;
-	m_time += 0.1;
-	//camera->LookAt(vec3(1, m_time, 1), vec3(-1, 0, 0), vec3(0, 1, 0));
-	//camera->LookAt(vec3(cos(m_time), 0, sin(m_time)), vec3(0, 1, 0), vec3(0, 1, 0));
-
-	renderer->SetCameraTransformInverse(camera->getTransformInverse());
-	renderer->SetProjection(camera->getProjection());
+void display(void) {
 
 	scene->draw();
-	std::cout << "<FRAME END>" << ::std::endl;
 }
 
 void reshape(int width, int height)
@@ -82,38 +165,84 @@ void reshape(int width, int height)
 	glutPostRedisplay();
 }
 
+void keyboard_special(int key, int x, int y) {
+	switch (key) {
+	case GLUT_KEY_LEFT:
+		scene->translateObject(-0.1, 0, 0);
+		break;
+	case GLUT_KEY_RIGHT:
+		scene->translateObject(0, 0, -0.1);
+		break;
+	case GLUT_KEY_UP:
+		scene->translateObject(0.1, 0, 0);
+		break;
+	case GLUT_KEY_DOWN:
+		scene->translateObject(0, 0, 0.1);
+		break;
+	default:
+		//fail
+		return;
+	}
+
+	//if key was accepted
+	glutPostRedisplay();
+}
+
 void keyboard(unsigned char key, int x, int y)
 {
 	switch (key) {
 	case 033:
 		exit(EXIT_SUCCESS);
 		break;
-	case 'r':
-		scene->rescaleModels(1.3f); // Increase scale by 30%
-		glutPostRedisplay();
+	case 9:
+		scene->cycleSelectedObject();
 		break;
-	case 't':
-		scene->rescaleModels(0.7f); // Decrease scale by 30%
-		glutPostRedisplay();
+	case 'c':
+		scene->scaleObject(1.3f); // Increase scale by 30%
+		break;
+	case 'x':
+		scene->scaleObject(0.7f); // Decrease scale by 30%
 		break;
 	case 'a':
-		scene->rotateModels(-30, 1);
-		glutPostRedisplay();
+		scene->translateObject(-0.2, 0, 0);
 		break;
 	case 'd':
-		scene->rotateModels(30, 1);
-		glutPostRedisplay();
+		scene->translateObject(0.2, 0, 0);
 		break;
 	case 'w':
-		scene->rotateModels(30, 0);
-		glutPostRedisplay();
+		scene->translateObject(0, 0, 0.2);
 		break;
 	case 's':
-		scene->rotateModels(-30, 0);
-		glutPostRedisplay();
+		scene->translateObject(0, 0, -0.2);
 		break;
+	case 'e':
+		scene->translateObject(0, 0.2, 0);
+		break;
+	case 'q':
+		scene->translateObject(0, -0.2, 0);
+		break;
+	case 'j':
+		scene->rotateObject(-30, 1);
+		break;
+	case 'l':
+		scene->rotateObject(30, 1);
+		break;
+	case 'k':
+		scene->rotateObject(30, 0);
+		break;
+	case 'i':
+		scene->rotateObject(-30, 0);
+		break;
+	case ' ':
+		swapCameras();
+		break;
+	default:
+		//fail
+		return;
 	}
 
+	//if key was accepted
+	glutPostRedisplay();
 }
 
 void mouse(int button, int state, int x, int y)
@@ -147,30 +276,46 @@ void motion(int x, int y)
 	last_y = y;
 }
 
+//----------------------------------------------------------------------------
+// Menus
+//----------------------------------------------------------------------------
+
+void primMenu(int id) {
+	if (scene) {
+		switch (id)
+		{
+		case DRAW_CUBE:
+			// Logic to draw the cube
+			scene->setDrawCube(true);
+			break;
+		case HIDE_CUBE:
+			// Logic to draw the cube
+			scene->setDrawCube(false);
+			break;
+		case DRAW_SPHERE:
+			// Logic to draw the sphere
+			scene->setDrawSphere(true);
+			break;
+		case HIDE_SPHERE:
+			// Logic to draw the sphere
+			scene->setDrawSphere(false);
+			break;
+		}
+	}
+}
+
 void fileMenu(int id)
 {
 	switch (id)
 	{
-	case FILE_OPEN:
-		CFileDialog dlg(TRUE, _T(".obj"), NULL, NULL, _T("*.obj|*.*"));
-		if (dlg.DoModal() == IDOK)
-		{
-			std::string s((LPCTSTR)dlg.GetPathName());
-			if (selectedDrawingOption == ADD_TO_SCENE)
-			{
-				// Add the new object to the current scene
-				scene->loadOBJModel((LPCTSTR)dlg.GetPathName());
-				glutPostRedisplay();
-			}
-			else if (selectedDrawingOption == REPLACE_SCENE)
-			{
-				// Replace the current scene with the new object
-				scene->removeObjects();
-				scene->loadOBJModel((LPCTSTR)dlg.GetPathName());
-				glutPostRedisplay();
-			}
-			
-		}
+	case OPEN_FILE_OBJ:
+		readFromFile();
+		break;
+	case ADD_CAMERA_ORTHO:
+		addOrthoCamera();
+		break;
+	case ADD_CAMERA_PROJECTION:
+		addProjCamera();
 		break;
 	}
 }
@@ -188,6 +333,14 @@ void optionMenu(int id)
 			// Logic to hide normals (turn off)
 			scene->setShowNormalsForMeshModels(false);
 			break;
+		case DRAW_VERTEX_NORMALS:
+			// Logic to draw normals to vertices (turn on)
+			scene->setShowNormalsToVerticesForMeshModels(true);
+			break;
+		case HIDE_VERTEX_NORMALS:
+			// Logic to draw normals to vertices (turn off)
+			scene->setShowNormalsToVerticesForMeshModels(false);
+			break;
 		case DRAW_BOUNDING_BOX:
 			// Logic to draw bounding box (turn on)
 			scene->setShowBoxForMeshModels(true);
@@ -197,6 +350,7 @@ void optionMenu(int id)
 			scene->setShowBoxForMeshModels(false);
 			break;
 		}
+		
 	}
 	std::cout << "WE GET HERE IN TURNING ON AND OFF THE NORMALS" << std::endl;
 	glutPostRedisplay();
@@ -215,16 +369,11 @@ void mainMenu(int id)
 	}
 }
 
-void objectDrawingOptionMenu(int option)
-{
-	selectedDrawingOption = option;
-}
-
 void rescaleWindow(bool up_or_down)
 {
 	// Your code to rescale the window goes here
 	// For example, you might use GLUT functions to reshape the window
-	
+
 	int newWidth, newHeight;
 
 	if (up_or_down) {
@@ -239,14 +388,13 @@ void rescaleWindow(bool up_or_down)
 	if (newWidth == glutGet(GLUT_WINDOW_WIDTH) && newHeight == glutGet(GLUT_WINDOW_HEIGHT)) {
 		return;
 	}
-
-	//scene->translateObjects((newWidth - glutGet(GLUT_WINDOW_WIDTH)) / 2, (newHeight - glutGet(GLUT_WINDOW_HEIGHT)) / 2, 0);
+	//scene->translateObject((newWidth - glutGet(GLUT_WINDOW_WIDTH)) / 2, (newHeight - glutGet(GLUT_WINDOW_HEIGHT)) / 2, 0);
 
 	glutReshapeWindow(newWidth, newHeight);
 	glutPostRedisplay();
 }
 
-void menuCallback(int menuItem) 
+void menuCallback(int menuItem)
 {
 	switch (menuItem) {
 	case RESCALE_WINDOW_MENU_ITEM_UP:
@@ -263,33 +411,42 @@ void menuCallback(int menuItem)
 
 void initMenu()
 {
+	int primitivesMenu = glutCreateMenu(primMenu);
+	glutAddMenuEntry("Draw Sphere", DRAW_SPHERE);
+	glutAddMenuEntry("Draw Cube", DRAW_CUBE);
+	glutAddMenuEntry("Hide Sphere", HIDE_SPHERE);
+	glutAddMenuEntry("Hide Cube", HIDE_CUBE);
+
 	int menuFile = glutCreateMenu(fileMenu);
-	glutAddMenuEntry("Open..", FILE_OPEN);
-	
+	glutAddMenuEntry("Orthographic Camera", ADD_CAMERA_ORTHO);
+	glutAddMenuEntry("Perspective Camera", ADD_CAMERA_PROJECTION);
+	glutAddMenuEntry(".OBJ Mesh...", OPEN_FILE_OBJ);
+	glutAddSubMenu("Primitives", primitivesMenu);
+
 	// Create the "Normal" submenu
 	int optionsSubMenu = glutCreateMenu(optionMenu);
 	// Attach the "Normal" submenu to the main menu
-	glutAddMenuEntry("Draw Normals", DRAW_NORMALS);
-	glutAddMenuEntry("Hide Normals", HIDE_NORMALS);
+	glutAddMenuEntry("Draw Normals To Faces", DRAW_NORMALS);
+	glutAddMenuEntry("Hide Normals To Faces", HIDE_NORMALS);
+	glutAddMenuEntry("Draw Normals To Vertices", DRAW_VERTEX_NORMALS);
+	glutAddMenuEntry("Hide Normals To Vertices", HIDE_VERTEX_NORMALS);
 	glutAddMenuEntry("Draw Bounding Box", DRAW_BOUNDING_BOX);
 	glutAddMenuEntry("Hide Bounding Box", HIDE_BOUNDING_BOX);
+	//Draw Hide cameras
+	//Draw hide vertex normals
 
 	int rescaleMenu = glutCreateMenu(menuCallback);
 	glutAddMenuEntry("Rescale Window Up", RESCALE_WINDOW_MENU_ITEM_UP);
 	glutAddMenuEntry("Rescale Window Down", RESCALE_WINDOW_MENU_ITEM_DOWN);
 
-	int objectDrawingMenu = glutCreateMenu(objectDrawingOptionMenu);
-	glutAddMenuEntry("Add to Current Scene", ADD_TO_SCENE);
-	glutAddMenuEntry("Replace Current Scene", REPLACE_SCENE);
-
 	glutCreateMenu(mainMenu);
-	glutAddSubMenu("File", menuFile);
-	glutAddSubMenu("Options", optionsSubMenu);
-	glutAddSubMenu("Rescaling Window", rescaleMenu);
+	glutAddSubMenu("New", menuFile);
+	glutAddSubMenu("View", optionsSubMenu);
+	glutAddSubMenu("Prim Mesh", primitivesMenu);
+	glutAddSubMenu("Window", rescaleMenu);
 	glutAddMenuEntry("Demo", MAIN_DEMO);
 	glutAddMenuEntry("About", MAIN_ABOUT);
-	glutAddSubMenu("Object Drawing Options", objectDrawingMenu);
-	
+
 	glutAttachMenu(GLUT_RIGHT_BUTTON);
 
 	// Attach the menu to a mouse button
@@ -297,6 +454,9 @@ void initMenu()
 }
 //----------------------------------------------------------------------------
 
+//----------------------------------------------------------------------------
+// Main
+//----------------------------------------------------------------------------
 
 int my_main(int argc, char** argv)
 {
@@ -319,20 +479,26 @@ int my_main(int argc, char** argv)
 	}
 	fprintf(stdout, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
-
 	renderer = new Renderer(1024, 1024);
 	scene = new Scene(renderer);
-	camera = new Camera();
+	Camera* camera = new Camera();
 
-	std::cout << "start";
+	std::cout << "[ ] Camera transform: " << std::endl;
+	camera->LookAt(vec3(0, 0, 1), vec3(0, 0, -1), vec3(0, 1, 0));
+	camera->Ortho(-1, 1, -1, 1, -0.5, -5);
+	scene->addCamera(camera);
+	renderer->setCameraMatrixes(scene->getActiveCamera()->getTransformInverse(), scene->getActiveCamera()->getProjection());
+
+	std::cout << "[ ] Reading mesh files... ";
 	MeshModel* demo_object = new MeshModel("bunny.obj");
 	scene->addMeshModel(demo_object);
-	std::cout << " end" << std::endl;
+	std::cout << " Done!" << std::endl;
 	//----------------------------------------------------------------------------
 
 	// Initialize Callbacks
 
 	glutDisplayFunc(display);
+	glutSpecialFunc(keyboard_special);
 	glutKeyboardFunc(keyboard);
 	glutMouseFunc(mouse);
 	glutMotionFunc(motion);
@@ -343,16 +509,8 @@ int my_main(int argc, char** argv)
 	renderer->Init();
 
 	//Set the camera projection we want and send it to renderer (vec3 cast to vec4)
-	//camera->LookAt(vec3(1, 1, 1), vec3(-1, 0, 0), vec3(0, 1, 0));
-	//std::cout << "[ ] Camera transform: " << std::endl;
-	//std::cout << camera->getTransformInverse() << std::endl;
 
-	renderer->SetCameraTransformInverse(camera->getTransformInverse());
-	renderer->SetProjection(camera->getProjection());
-
-
-	demo_object->draw(renderer);
-	renderer->SwapBuffers();
+	std::cout << "[V] Done with the initialization! " << std::endl;
 	glutMainLoop();
 	delete scene;
 	delete renderer;
